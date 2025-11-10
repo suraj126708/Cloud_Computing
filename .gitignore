@@ -1,3 +1,139 @@
-/node_modules
-/.env
-/frontend/node_modules
+# Dependencies
+node_modules/
+frontend/node_modules/
+layer/node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+
+# Build outputs
+dist/
+frontend/dist/
+build/
+frontend/build/
+.serverless/
+*.zip
+sharp-layer.zip
+node_modules.tar.gz
+*.tar.gz
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log.*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+.nyc_output/
+
+# Testing
+.coverage/
+test-results/
+playwright-report/
+
+# Cache
+.cache/
+.parcel-cache/
+.vite/
+node_modules/.cache/
+.npm/
+.eslintcache
+.stylelintcache
+
+# IDE and Editor files
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+bash.exe.stackdump
+nul
+
+# Serverless Framework
+.serverless/
+.serverless_plugins/
+
+# AWS
+.aws-sam/
+samconfig.toml
+*.pem
+*.key
+
+# DynamoDB Local
+.dynamodb/
+dynamodb_local_latest/
+
+# Docker
+Dockerfile.layer
+docker-compose.override.yml
+.dockerignore
+
+# Layer files
+layer/
+sharp-layer/
+*.layer.zip
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.swp
+*.swo
+
+# Optional: Uncomment if you want to ignore package-lock files
+# package-lock.json
+
+# Optional: Keep these if needed for deployment
+# !package-lock.json
+
+# Sharp layer artifacts
+.sharp-layer-arn
+
+# Misc
+*.local
+*.orig

@@ -1,0 +1,407 @@
+service: youtube-canva-serverless
+
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  environment:
+    STAGE: ${self:provider.stage}
+    REGION: ${self:provider.region}
+    JWT_SECRET: ${env:JWT_SECRET, 'farid'}
+    S3_BUCKET: ${self:service}-${self:provider.stage}-images
+    USERS_TABLE: ${self:service}-${self:provider.stage}-users
+    DESIGNS_TABLE: ${self:service}-${self:provider.stage}-designs
+    USER_IMAGES_TABLE: ${self:service}-${self:provider.stage}-user-images
+    DESIGN_IMAGES_TABLE: ${self:service}-${self:provider.stage}-design-images
+    BACKGROUND_IMAGES_TABLE: ${self:service}-${self:provider.stage}-background-images
+    TEMPLATES_TABLE: ${self:service}-${self:provider.stage}-templates
+
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-${self:provider.stage}-*"
+
+    - Effect: Allow
+      Action:
+        - s3:GetObject
+        - s3:PutObject
+        - s3:DeleteObject
+        - s3:ListBucket
+      Resource:
+        - "arn:aws:s3:::${self:service}-${self:provider.stage}-images"
+        - "arn:aws:s3:::${self:service}-${self:provider.stage}-images/*"
+
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "*"
+
+    - Effect: Allow
+      Action:
+        - lambda:GetLayerVersion
+      Resource: "arn:aws:lambda:${self:provider.region}:*:layer:sharp:*"
+
+plugins:
+  - serverless-offline
+  - serverless-dynamodb-local
+
+package:
+  patterns:
+    - "!node_modules/.cache/**"
+    - "!node_modules/**/*.md"
+    - "!node_modules/**/*.txt"
+    - "!node_modules/**/test/**"
+    - "!node_modules/**/tests/**"
+    - "!node_modules/**/docs/**"
+    - "!node_modules/**/examples/**"
+    - "!node_modules/**/*.examples.json"
+    - "!node_modules/**/*.map"
+    - "!node_modules/**/*.d.ts"
+    - "!node_modules/**/LICENSE*"
+    - "!node_modules/**/CHANGELOG*"
+    - "!node_modules/**/README*"
+    - "!node_modules/**/History*"
+    - "!node_modules/**/AUTHORS*"
+    - "!node_modules/**/CONTRIBUTORS*"
+    - "!node_modules/**/NOTICE*"
+    - "!node_modules/**/COPYING*"
+    - "!node_modules/**/INSTALL*"
+    - "!node_modules/**/Makefile*"
+    - "!node_modules/**/Gulpfile*"
+    - "!node_modules/**/Gruntfile*"
+    - "!node_modules/**/gulpfile*"
+    - "!node_modules/**/gruntfile*"
+    - "!node_modules/**/.npmignore"
+    - "!node_modules/**/.gitignore"
+    - "!node_modules/**/.gitattributes"
+    - "!node_modules/**/.editorconfig"
+    - "!node_modules/**/.eslintrc*"
+    - "!node_modules/**/.jshintrc*"
+    - "!node_modules/**/.babelrc*"
+    - "!node_modules/**/.prettierrc*"
+    - "!node_modules/**/tsconfig.json"
+    - "!node_modules/**/jsconfig.json"
+    - "!node_modules/**/yarn.lock"
+    - "!node_modules/**/package-lock.json"
+    - "!node_modules/sharp/**"
+    - "!frontend/**"
+    - "!scripts/**"
+    - "!DEPLOYMENT.md"
+    - "!env.example"
+    - "!.git/**"
+    - "!.vscode/**"
+    - "!.idea/**"
+  individually: true
+
+custom:
+  serverless-offline:
+    httpPort: 3000
+    host: 0.0.0.0
+    noPrependStageInUrl: true
+    bodySizeLimit: 50mb
+
+  dynamodb:
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+    stages:
+      - dev
+
+  # Sharp layer ARN - set via SHARP_LAYER_ARN env var
+  # After deploying the layer with 'npm run deploy-layer', set SHARP_LAYER_ARN environment variable
+  # The deploy script will save the ARN to .sharp-layer-arn file for reference
+  sharpLayerArn: ${env:SHARP_LAYER_ARN, 'arn:aws:lambda:us-east-1:905418368332:layer:sharp:5'}
+
+resources:
+  Resources:
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-users
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: EmailIndex
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 5
+              WriteCapacityUnits: 5
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+
+    DesignsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-designs
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: user_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: user_id
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 5
+              WriteCapacityUnits: 5
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+
+    UserImagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-user-images
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: user_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: user_id
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 5
+              WriteCapacityUnits: 5
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+
+    DesignImagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-design-images
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+
+    BackgroundImagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-background-images
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+
+    TemplatesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-${self:provider.stage}-templates
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+
+    ImagesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:service}-${self:provider.stage}-images
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders: ["*"]
+              AllowedMethods: [GET, PUT, POST, DELETE, HEAD]
+              AllowedOrigins: ["*"]
+              MaxAge: 3000
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          IgnorePublicAcls: true
+          BlockPublicPolicy: false
+          RestrictPublicBuckets: false
+        OwnershipControls:
+          Rules:
+            - ObjectOwnership: BucketOwnerEnforced
+
+    ImagesBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref ImagesBucket
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: AllowPublicRead
+              Effect: Allow
+              Principal: "*"
+              Action: s3:GetObject
+              Resource: !Sub "arn:aws:s3:::${self:service}-${self:provider.stage}-images/*"
+
+functions:
+  userRegister:
+    handler: handlers/auth.register
+    events:
+      - http:
+          path: /api/user-register
+          method: post
+          cors: true
+
+  userLogin:
+    handler: handlers/auth.login
+    events:
+      - http:
+          path: /api/user-login
+          method: post
+          cors: true
+
+  createUserDesign:
+    handler: handlers/design.createUserDesign
+    layers:
+      - ${self:custom.sharpLayerArn}
+    events:
+      - http:
+          path: /api/create-user-design
+          method: post
+          cors: true
+
+  updateUserDesign:
+    handler: handlers/design.updateUserDesign
+    layers:
+      - ${self:custom.sharpLayerArn}
+    events:
+      - http:
+          path: /api/update-user-design/{design_id}
+          method: put
+          cors: true
+
+  addUserImage:
+    handler: handlers/images.addUserImage
+    layers:
+      - ${self:custom.sharpLayerArn}
+    events:
+      - http:
+          path: /api/add-user-image
+          method: post
+          cors: true
+
+  getUserImages:
+    handler: handlers/images.getUserImages
+    events:
+      - http:
+          path: /api/get-user-image
+          method: get
+          cors: true
+
+  getUserDesign:
+    handler: handlers/design.getUserDesign
+    events:
+      - http:
+          path: /api/user-design/{design_id}
+          method: get
+          cors: true
+
+  getUserDesigns:
+    handler: handlers/design.getUserDesigns
+    events:
+      - http:
+          path: /api/user-designs
+          method: get
+          cors: true
+
+  deleteUserDesign:
+    handler: handlers/design.deleteUserDesign
+    events:
+      - http:
+          path: /api/delete-user-design/{design_id}
+          method: delete
+          cors: true
+
+  getDesignImages:
+    handler: handlers/images.getDesignImages
+    events:
+      - http:
+          path: /api/design-images
+          method: get
+          cors: true
+
+  getBackgroundImages:
+    handler: handlers/images.getBackgroundImages
+    events:
+      - http:
+          path: /api/background-images
+          method: get
+          cors: true
+
+  getTemplates:
+    handler: handlers/templates.getTemplates
+    events:
+      - http:
+          path: /api/templates
+          method: get
+          cors: true
+
+  addUserTemplate:
+    handler: handlers/templates.addUserTemplate
+    events:
+      - http:
+          path: /api/add-user-template/{template_id}
+          method: get
+          cors: true
+
+  deleteTemplate:
+    handler: handlers/templates.deleteTemplate
+    events:
+      - http:
+          path: /api/delete-template/{template_id}
+          method: delete
+          cors: true
+
+  ping:
+    handler: handlers/auth.ping
+    events:
+      - http:
+          path: /api/ping
+          method: get
+          cors: true

@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint src --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "bash deploy.sh",
+    "deploy:aws": "aws s3 sync ./dist s3://$AWS_S3_BUCKET_NAME --delete && aws s3 cp ./dist/index.html s3://$AWS_S3_BUCKET_NAME/index.html --content-type \"text/html\""
   },
   "dependencies": {
     "axios": "^1.6.0",
