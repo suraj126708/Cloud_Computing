@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Header from "../components/Header";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { BsGrid1X2, BsFillImageFill, BsFolder, BsLayers } from "react-icons/bs";
 import {
   FaShapes,
@@ -9,6 +9,8 @@ import {
   FaUndo,
   FaRedo,
   FaKeyboard,
+  FaEye,
+  FaEyeSlash,
 } from "react-icons/fa";
 import { IoDuplicateOutline } from "react-icons/io5";
 import { TfiText } from "react-icons/tfi";
@@ -38,6 +40,7 @@ import {
 const Main = () => {
   const [selectItem, setSelectItem] = useState("");
   const { design_id } = useParams();
+  const location = useLocation();
 
   // Debug: Log design_id to help identify issues
   useEffect(() => {
@@ -73,6 +76,7 @@ const Main = () => {
   // New feature states
   const [zoom, setZoom] = useState(100);
   const [showGrid, setShowGrid] = useState(false);
+  const [showOverlays, setShowOverlays] = useState(false); // Hide overlays by default
   const [clipboard, setClipboard] = useState(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -97,6 +101,12 @@ const Main = () => {
     },
   ]);
 
+  // Refs for function references
+  const moveElementRef = useRef(null);
+  const resizeElementRef = useRef(null);
+  const rotateElementRef = useRef(null);
+  const remove_backgroundRef = useRef(null);
+
   // Save state to history
   const saveToHistory = useCallback(
     (comps) => {
@@ -107,71 +117,6 @@ const Main = () => {
     },
     [history, historyIndex]
   );
-
-  // Undo functionality
-  const undo = useCallback(() => {
-    if (historyIndex > 0) {
-      const prevState = history[historyIndex - 1];
-      setComponents(
-        prevState.map((c) => ({
-          ...c,
-          setCurrentComponent: (a) => setCurrentComponent(a),
-          moveElement,
-          resizeElement,
-          rotateElement,
-        }))
-      );
-      setHistoryIndex(historyIndex - 1);
-      toast.success("Undone");
-    }
-  }, [history, historyIndex]);
-
-  // Redo functionality
-  const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      const nextState = history[historyIndex + 1];
-      setComponents(
-        nextState.map((c) => ({
-          ...c,
-          setCurrentComponent: (a) => setCurrentComponent(a),
-          moveElement,
-          resizeElement,
-          rotateElement,
-        }))
-      );
-      setHistoryIndex(historyIndex + 1);
-      toast.success("Redone");
-    }
-  }, [history, historyIndex]);
-
-  // Copy/Paste functionality
-  const handleCopy = useCallback(() => {
-    if (current_component && current_component.name !== "main_frame") {
-      setClipboard(JSON.parse(JSON.stringify(current_component)));
-      toast.success("Element copied to clipboard");
-    } else {
-      toast.error("Select an element to copy");
-    }
-  }, [current_component]);
-
-  const handlePaste = useCallback(() => {
-    if (clipboard) {
-      const newComponent = {
-        ...clipboard,
-        id: Date.now(),
-        left: (clipboard.left || 10) + 20,
-        top: (clipboard.top || 10) + 20,
-      };
-      const newComponents = [...components, newComponent];
-      setComponents(newComponents);
-      setCurrentComponent(newComponent);
-      setSelectItem(newComponent.id);
-      saveToHistory(newComponents);
-      toast.success("Element pasted");
-    } else {
-      toast.error("Nothing to paste");
-    }
-  }, [clipboard, components, saveToHistory]);
 
   // Layer reordering
   const moveLayerUp = useCallback(() => {
@@ -208,77 +153,6 @@ const Main = () => {
     }
   }, [current_component, components, saveToHistory]);
 
-  // Duplicate functionality
-  const duplicate = useCallback(
-    (current) => {
-      if (current) {
-        const newComponent = { ...current, id: Date.now() };
-        const newComponents = [...components, newComponent];
-        setComponents(newComponents);
-        saveToHistory(newComponents);
-        toast.success("Element duplicated");
-      }
-    },
-    [components, saveToHistory]
-  );
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
-        e.preventDefault();
-        undo();
-      } else if (
-        (e.ctrlKey || e.metaKey) &&
-        (e.key === "y" || (e.key === "z" && e.shiftKey))
-      ) {
-        e.preventDefault();
-        redo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "c") {
-        e.preventDefault();
-        handleCopy();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "v") {
-        e.preventDefault();
-        handlePaste();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "d") {
-        e.preventDefault();
-        if (current_component) duplicate(current_component);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-        e.preventDefault();
-        // Save is handled by Header component
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "g") {
-        e.preventDefault();
-        setShowGrid(!showGrid);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "=") {
-        e.preventDefault();
-        if (zoom < 200) setZoom(Math.min(zoom + 10, 200));
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "-") {
-        e.preventDefault();
-        if (zoom > 50) setZoom(Math.max(zoom - 10, 50));
-      } else if (e.key === "?" && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        setShowShortcuts(true);
-      } else if (
-        e.key === "Delete" &&
-        current_component &&
-        current_component.name !== "main_frame"
-      ) {
-        removeComponent(current_component.id);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    undo,
-    redo,
-    current_component,
-    handleCopy,
-    handlePaste,
-    duplicate,
-    zoom,
-    showGrid,
-  ]);
-
   const setElements = (type, name) => {
     setState(type);
     setShow({
@@ -287,130 +161,460 @@ const Main = () => {
     });
   };
 
-  const moveElement = (id, currentInfo) => {
+  // Define functions using function declarations (hoisted) to avoid initialization order issues
+  function moveElement(id, currentInfo, e) {
+    // Prevent event propagation to avoid triggering other handlers
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     setCurrentComponent(currentInfo);
-    let isMoving = true;
 
     const currentDiv = document.getElementById(id);
+    if (!currentDiv) return;
 
-    const mouseMove = ({ movementX, movementY }) => {
-      setSelectItem("");
-      const getStyle = window.getComputedStyle(currentDiv);
-      const left = parseInt(getStyle.left);
-      const top = parseInt(getStyle.top);
-      if (isMoving) {
-        currentDiv.style.left = `${left + movementX}px`;
-        currentDiv.style.top = `${top + movementY}px`;
+    // Get initial position and mouse position
+    const initialRect = currentDiv.getBoundingClientRect();
+    const initialLeft = parseInt(window.getComputedStyle(currentDiv).left) || 0;
+    const initialTop = parseInt(window.getComputedStyle(currentDiv).top) || 0;
+    const startX = e ? e.clientX : 0;
+    const startY = e ? e.clientY : 0;
+
+    // Movement threshold - only start moving after moving 3px
+    const MOVEMENT_THRESHOLD = 3;
+    let hasStartedMoving = false;
+    let isMoving = false;
+
+    const mouseMove = (moveEvent) => {
+      if (!isMoving) {
+        const deltaX = Math.abs(moveEvent.clientX - startX);
+        const deltaY = Math.abs(moveEvent.clientY - startY);
+        const totalMovement = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+        // Only start moving if movement exceeds threshold
+        if (totalMovement > MOVEMENT_THRESHOLD) {
+          hasStartedMoving = true;
+          isMoving = true;
+          setSelectItem(""); // Clear selection indicator while moving
+        } else {
+          return; // Don't move yet
+        }
+      }
+
+      if (hasStartedMoving && isMoving) {
+        const deltaX = moveEvent.clientX - startX;
+        const deltaY = moveEvent.clientY - startY;
+
+        const newLeft = initialLeft + deltaX;
+        const newTop = initialTop + deltaY;
+
+        currentDiv.style.left = `${newLeft}px`;
+        currentDiv.style.top = `${newTop}px`;
       }
     };
 
-    const mouseUp = (e) => {
-      setSelectItem(currentInfo.id);
+    const mouseUp = (upEvent) => {
+      if (hasStartedMoving) {
+        // Only update state if move actually happened
+        setSelectItem(currentInfo.id);
+        const finalLeft = parseInt(currentDiv.style.left);
+        const finalTop = parseInt(currentDiv.style.top);
+        setLeft(finalLeft);
+        setTop(finalTop);
+      }
+
+      hasStartedMoving = false;
       isMoving = false;
       window.removeEventListener("mousemove", mouseMove);
       window.removeEventListener("mouseup", mouseUp);
-      setLeft(parseInt(currentDiv.style.left));
-      setTop(parseInt(currentDiv.style.top));
     };
 
-    window.addEventListener("mousemove", mouseMove);
-    window.addEventListener("mouseup", mouseUp);
+    // Only add listeners if we have a valid event
+    if (e) {
+      window.addEventListener("mousemove", mouseMove);
+      window.addEventListener("mouseup", mouseUp);
+    }
+
     currentDiv.ondragstart = function () {
       return false;
     };
-  };
+  }
 
-  const resizeElement = (id, currentInfo) => {
+  function resizeElement(id, currentInfo, e) {
+    // Prevent event propagation to avoid triggering other handlers
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     setCurrentComponent(currentInfo);
 
-    let isMoving = true;
-
     const currentDiv = document.getElementById(id);
+    if (!currentDiv) return;
 
-    const mouseMove = ({ movementX, movementY }) => {
-      const getStyle = window.getComputedStyle(currentDiv);
-      const width = parseInt(getStyle.width);
-      const height = parseInt(getStyle.height);
-      if (isMoving) {
-        currentDiv.style.width = `${width + movementX}px`;
-        currentDiv.style.height = `${height + movementY}px`;
+    // Get initial dimensions and mouse position
+    const initialRect = currentDiv.getBoundingClientRect();
+    const initialWidth = initialRect.width;
+    const initialHeight = initialRect.height;
+    const startX = e ? e.clientX : 0;
+    const startY = e ? e.clientY : 0;
+
+    // Movement threshold - only start resizing after moving 3px
+    const MOVEMENT_THRESHOLD = 3;
+    let hasStartedResizing = false;
+    let isResizing = false;
+
+    const mouseMove = (moveEvent) => {
+      if (!isResizing) {
+        const deltaX = Math.abs(moveEvent.clientX - startX);
+        const deltaY = Math.abs(moveEvent.clientY - startY);
+        const totalMovement = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+        // Only start resizing if movement exceeds threshold
+        if (totalMovement > MOVEMENT_THRESHOLD) {
+          hasStartedResizing = true;
+          isResizing = true;
+        } else {
+          return; // Don't resize yet
+        }
+      }
+
+      if (hasStartedResizing && isResizing) {
+        const deltaX = moveEvent.clientX - startX;
+        const deltaY = moveEvent.clientY - startY;
+
+        const newWidth = Math.max(50, initialWidth + deltaX); // Minimum width of 50px
+        const newHeight = Math.max(50, initialHeight + deltaY); // Minimum height of 50px
+
+        currentDiv.style.width = `${newWidth}px`;
+        currentDiv.style.height = `${newHeight}px`;
       }
     };
 
-    const mouseUp = (e) => {
-      isMoving = false;
+    const mouseUp = (upEvent) => {
+      if (hasStartedResizing) {
+        // Only update state if resize actually happened
+        const finalWidth = parseInt(currentDiv.style.width);
+        const finalHeight = parseInt(currentDiv.style.height);
+        setWidth(finalWidth);
+        setHeight(finalHeight);
+
+        // Update component in components array
+        setComponents((prevComponents) => {
+          const index = prevComponents.findIndex(
+            (c) => c.id === currentInfo.id
+          );
+          if (index === -1) return prevComponents;
+          const updated = [...prevComponents];
+          updated[index] = {
+            ...updated[index],
+            width: finalWidth,
+            height: finalHeight,
+          };
+          setCurrentComponent({
+            ...currentInfo,
+            width: finalWidth,
+            height: finalHeight,
+          });
+          saveToHistory(updated);
+          return updated;
+        });
+      }
+
+      hasStartedResizing = false;
+      isResizing = false;
       window.removeEventListener("mousemove", mouseMove);
       window.removeEventListener("mouseup", mouseUp);
-      setWidth(parseInt(currentDiv.style.width));
-      setHeight(parseInt(currentDiv.style.height));
     };
 
-    window.addEventListener("mousemove", mouseMove);
-    window.addEventListener("mouseup", mouseUp);
+    // Only add listeners if we have a valid event
+    if (e) {
+      window.addEventListener("mousemove", mouseMove);
+      window.addEventListener("mouseup", mouseUp);
+    }
+
     currentDiv.ondragstart = function () {
       return false;
     };
-  };
+  }
 
-  const rotateElement = (id, currentInfo) => {
+  function rotateElement(id, currentInfo, e) {
+    // Prevent event propagation to avoid triggering other handlers
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     setCurrentComponent(currentInfo);
 
     const target = document.getElementById(id);
+    if (!target) return;
 
-    const mouseMove = ({ movementX, movementY }) => {
-      const getStyle = window.getComputedStyle(target);
+    // Get initial rotation and mouse position
+    const getStyle = window.getComputedStyle(target);
+    const trans = getStyle.transform || "matrix(1, 0, 0, 1, 0, 0)";
+    const values = trans.split("(")[1]?.split(")")[0]?.split(",") || [
+      "1",
+      "0",
+      "0",
+      "1",
+      "0",
+      "0",
+    ];
+    const initialAngle = Math.round(
+      Math.atan2(parseFloat(values[1]) || 0, parseFloat(values[0]) || 1) *
+        (180 / Math.PI)
+    );
+    let initialDeg = initialAngle < 0 ? initialAngle + 360 : initialAngle;
 
-      const trans = getStyle.transform;
+    const startX = e ? e.clientX : 0;
+    const startY = e ? e.clientY : 0;
+    const rect = target.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
 
-      const values = trans.split("(")[1].split(")")[0].split(",");
+    // Movement threshold - only start rotating after moving 3px
+    const MOVEMENT_THRESHOLD = 3;
+    let hasStartedRotating = false;
+    let isRotating = false;
 
-      const angle = Math.round(
-        Math.atan2(values[1], values[0]) * (180 / Math.PI)
-      );
+    const mouseMove = (moveEvent) => {
+      if (!isRotating) {
+        const deltaX = Math.abs(moveEvent.clientX - startX);
+        const deltaY = Math.abs(moveEvent.clientY - startY);
+        const totalMovement = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-      let deg = angle < 0 ? angle + 360 : angle;
-
-      if (movementX) {
-        deg = deg + movementX;
+        // Only start rotating if movement exceeds threshold
+        if (totalMovement > MOVEMENT_THRESHOLD) {
+          hasStartedRotating = true;
+          isRotating = true;
+        } else {
+          return; // Don't rotate yet
+        }
       }
-      target.style.transform = `rotate(${deg}deg)`;
+
+      if (hasStartedRotating && isRotating) {
+        // Calculate angle from center to current mouse position
+        const angle =
+          Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX) *
+          (180 / Math.PI);
+
+        // Calculate angle from center to initial mouse position
+        const startAngle =
+          Math.atan2(startY - centerY, startX - centerX) * (180 / Math.PI);
+
+        // Calculate rotation delta
+        let deltaDeg = angle - startAngle + initialDeg;
+
+        // Normalize to 0-360
+        if (deltaDeg < 0) deltaDeg += 360;
+        if (deltaDeg >= 360) deltaDeg -= 360;
+
+        target.style.transform = `rotate(${deltaDeg}deg)`;
+      }
     };
-    const mouseUp = (e) => {
+
+    const mouseUp = (upEvent) => {
+      if (hasStartedRotating) {
+        // Only update state if rotation actually happened
+        const finalStyle = window.getComputedStyle(target);
+        const finalTrans = finalStyle.transform || "matrix(1, 0, 0, 1, 0, 0)";
+        const finalValues = finalTrans
+          .split("(")[1]
+          ?.split(")")[0]
+          ?.split(",") || ["1", "0", "0", "1", "0", "0"];
+        const finalAngle = Math.round(
+          Math.atan2(
+            parseFloat(finalValues[1]) || 0,
+            parseFloat(finalValues[0]) || 1
+          ) *
+            (180 / Math.PI)
+        );
+        let finalDeg = finalAngle < 0 ? finalAngle + 360 : finalAngle;
+        setRotate(finalDeg);
+      }
+
+      hasStartedRotating = false;
+      isRotating = false;
       window.removeEventListener("mousemove", mouseMove);
       window.removeEventListener("mouseup", mouseUp);
-
-      const getStyle = window.getComputedStyle(target);
-      const trans = getStyle.transform;
-      const values = trans.split("(")[1].split(")")[0].split(",");
-      const angle = Math.round(
-        Math.atan2(values[1], values[0]) * (180 / Math.PI)
-      );
-      let deg = angle < 0 ? angle + 360 : angle;
-      setRotate(deg);
     };
 
-    window.addEventListener("mousemove", mouseMove);
-    window.addEventListener("mouseup", mouseUp);
+    // Only add listeners if we have a valid event
+    if (e) {
+      window.addEventListener("mousemove", mouseMove);
+      window.addEventListener("mouseup", mouseUp);
+    }
 
     target.ondragstart = function () {
       return false;
     };
-  };
+  }
 
-  const removeComponent = (id) => {
-    const temp = components.filter((c) => c.id !== id);
-    setCurrentComponent("");
-    setComponents(temp);
-    saveToHistory(temp);
-  };
+  const removeComponent = useCallback(
+    (id) => {
+      setComponents((prevComponents) => {
+        const temp = prevComponents.filter((c) => c.id !== id);
+        // Ensure all remaining components have methods attached
+        const updated = temp.map((c) => ({
+          ...c,
+          setCurrentComponent: (a) => setCurrentComponent(a),
+          moveElement,
+          resizeElement,
+          rotateElement,
+          remove_background,
+        }));
+        setCurrentComponent("");
+        saveToHistory(updated);
+        return updated;
+      });
+    },
+    [moveElement, resizeElement, rotateElement, saveToHistory]
+  );
 
-  const remove_background = () => {
-    const com = components.find((c) => c.id === current_component.id);
-    const temp = components.filter((c) => c.id !== current_component.id);
-    com.image = "";
-    setImage("");
-    setComponents([...temp, com]);
-  };
+  function remove_background() {
+    if (!current_component) return;
+    setComponents((prevComponents) => {
+      const index = prevComponents.findIndex(
+        (c) => c.id === current_component.id
+      );
+      if (index === -1) return prevComponents;
+      const updated = [...prevComponents];
+      updated[index] = {
+        ...updated[index],
+        image: "",
+      };
+      setImage("");
+      setCurrentComponent({ ...current_component, image: "" });
+      saveToHistory(updated);
+      return updated;
+    });
+    toast.success("Background removed");
+  }
+
+  // Update refs after functions are defined (useEffect runs after render)
+  useEffect(() => {
+    moveElementRef.current = moveElement;
+    resizeElementRef.current = resizeElement;
+    rotateElementRef.current = rotateElement;
+    remove_backgroundRef.current = remove_background;
+  });
+
+  // Undo functionality - uses refs to avoid initialization order issues
+  const undo = useCallback(() => {
+    if (historyIndex > 0) {
+      const prevState = history[historyIndex - 1];
+      setComponents(
+        prevState.map((c) => ({
+          ...c,
+          setCurrentComponent: (a) => setCurrentComponent(a),
+          moveElement: moveElementRef.current,
+          resizeElement: resizeElementRef.current,
+          rotateElement: rotateElementRef.current,
+          remove_background:
+            c.name === "main_frame" ? remove_backgroundRef.current : undefined,
+        }))
+      );
+      setHistoryIndex(historyIndex - 1);
+      toast.success("Undone");
+    }
+  }, [history, historyIndex]);
+
+  // Redo functionality - uses refs to avoid initialization order issues
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const nextState = history[historyIndex + 1];
+      setComponents(
+        nextState.map((c) => ({
+          ...c,
+          setCurrentComponent: (a) => setCurrentComponent(a),
+          moveElement: moveElementRef.current,
+          resizeElement: resizeElementRef.current,
+          rotateElement: rotateElementRef.current,
+          remove_background:
+            c.name === "main_frame" ? remove_backgroundRef.current : undefined,
+        }))
+      );
+      setHistoryIndex(historyIndex + 1);
+      toast.success("Redone");
+    }
+  }, [history, historyIndex]);
+
+  // Copy/Paste functionality - defined after moveElement, resizeElement, rotateElement, remove_background
+  const handleCopy = useCallback(() => {
+    if (current_component && current_component.name !== "main_frame") {
+      setClipboard(JSON.parse(JSON.stringify(current_component)));
+      toast.success("Element copied to clipboard");
+    } else {
+      toast.error("Select an element to copy");
+    }
+  }, [current_component]);
+
+  const handlePaste = useCallback(() => {
+    if (!clipboard) {
+      toast.error("Nothing to paste");
+      return;
+    }
+
+    // Create new component with offset position
+    const newComponent = {
+      ...clipboard,
+      id: Date.now(), // New unique ID
+      left: (clipboard.left || 10) + 20,
+      top: (clipboard.top || 10) + 20,
+      // Remove methods from clipboard (they're functions and shouldn't be copied)
+      setCurrentComponent: undefined,
+      moveElement: undefined,
+      resizeElement: undefined,
+      rotateElement: undefined,
+      remove_background: undefined,
+    };
+    // Remove undefined properties
+    Object.keys(newComponent).forEach((key) => {
+      if (newComponent[key] === undefined) {
+        delete newComponent[key];
+      }
+    });
+
+    // Attach required methods to new component using refs
+    newComponent.setCurrentComponent = (a) => setCurrentComponent(a);
+    newComponent.moveElement = moveElementRef.current;
+    newComponent.resizeElement = resizeElementRef.current;
+    newComponent.rotateElement = rotateElementRef.current;
+    if (clipboard.name === "main_frame") {
+      newComponent.remove_background = remove_backgroundRef.current;
+    }
+
+    const newComponents = [...components, newComponent];
+    // Ensure all components have fresh method references
+    const updatedComponents = newComponents
+      .map((c) => ({
+        ...c,
+        setCurrentComponent: (a) => setCurrentComponent(a),
+        moveElement: moveElementRef.current,
+        resizeElement: resizeElementRef.current,
+        rotateElement: rotateElementRef.current,
+        remove_background:
+          c.name === "main_frame" ? remove_backgroundRef.current : undefined,
+      }))
+      .map((c) => {
+        // Remove undefined properties
+        const cleaned = { ...c };
+        Object.keys(cleaned).forEach((key) => {
+          if (cleaned[key] === undefined) {
+            delete cleaned[key];
+          }
+        });
+        return cleaned;
+      });
+
+    setComponents(updatedComponents);
+    setCurrentComponent(newComponent);
+    setSelectItem(newComponent.id);
+    saveToHistory(updatedComponents);
+    toast.success("Element pasted");
+  }, [clipboard, components, saveToHistory]);
 
   const opacityHandle = (e) => {
     setOpacity(parseFloat(e.target.value));
@@ -439,8 +643,17 @@ const Main = () => {
     setSelectItem(id);
     setCurrentComponent(style);
     const newComponents = [...components, style];
-    setComponents(newComponents);
-    saveToHistory(newComponents);
+    // Ensure all components have methods attached
+    const updatedComponents = newComponents.map((c) => ({
+      ...c,
+      setCurrentComponent: (a) => setCurrentComponent(a),
+      moveElement,
+      resizeElement,
+      rotateElement,
+      remove_background,
+    }));
+    setComponents(updatedComponents);
+    saveToHistory(updatedComponents);
   };
 
   const add_text = (name, type) => {
@@ -452,6 +665,8 @@ const Main = () => {
       type,
       left: 10,
       top: 10,
+      width: 200,
+      height: 50,
       opacity: 1,
       rotate,
       z_index: 10,
@@ -465,9 +680,9 @@ const Main = () => {
       textShadow: "none",
       textOutline: "none",
       setCurrentComponent: (a) => setCurrentComponent(a),
-      moveElement,
-      resizeElement,
-      rotateElement,
+      moveElement: moveElementRef.current,
+      resizeElement: resizeElementRef.current,
+      rotateElement: rotateElementRef.current,
     };
 
     setWeight("");
@@ -475,8 +690,17 @@ const Main = () => {
     setSelectItem(id);
     setCurrentComponent(style);
     const newComponents = [...components, style];
-    setComponents(newComponents);
-    saveToHistory(newComponents);
+    // Ensure all components have methods attached
+    const updatedComponents = newComponents.map((c) => ({
+      ...c,
+      setCurrentComponent: (a) => setCurrentComponent(a),
+      moveElement: moveElementRef.current,
+      resizeElement: resizeElementRef.current,
+      rotateElement: rotateElementRef.current,
+      remove_background: remove_backgroundRef.current,
+    }));
+    setComponents(updatedComponents);
+    saveToHistory(updatedComponents);
   };
 
   const add_image = (img) => {
@@ -496,16 +720,25 @@ const Main = () => {
       ratius: 0,
       image: img,
       setCurrentComponent: (a) => setCurrentComponent(a),
-      moveElement,
-      resizeElement,
-      rotateElement,
+      moveElement: moveElementRef.current,
+      resizeElement: resizeElementRef.current,
+      rotateElement: rotateElementRef.current,
     };
 
     setSelectItem(id);
     setCurrentComponent(style);
     const newComponents = [...components, style];
-    setComponents(newComponents);
-    saveToHistory(newComponents);
+    // Ensure all components have methods attached
+    const updatedComponents = newComponents.map((c) => ({
+      ...c,
+      setCurrentComponent: (a) => setCurrentComponent(a),
+      moveElement: moveElementRef.current,
+      resizeElement: resizeElementRef.current,
+      rotateElement: rotateElementRef.current,
+      remove_background: remove_backgroundRef.current,
+    }));
+    setComponents(updatedComponents);
+    saveToHistory(updatedComponents);
   };
 
   useEffect(() => {
@@ -548,10 +781,8 @@ const Main = () => {
             component.radius = radius || current_component.radius;
         }
 
-        if (current_component.name === "main_frame" && image) {
-          component.image = image || current_component.image;
-        }
-        if (color !== "") component.color = color || current_component.color;
+        // Image handling for main_frame - handled separately to work even when not selected
+        // Color is now handled directly in the color input onChange handler
 
         if (current_component.name !== "main_frame") {
           if (left !== "") component.left = left || current_component.left;
@@ -562,13 +793,20 @@ const Main = () => {
             component.z_index = zIndex || current_component.z_index;
         }
 
+        // Preserve methods when updating component
+        component.setCurrentComponent = (a) => setCurrentComponent(a);
+        component.moveElement = moveElementRef.current;
+        component.resizeElement = resizeElementRef.current;
+        component.rotateElement = rotateElementRef.current;
+        if (component.remove_background !== undefined) {
+          component.remove_background = remove_backgroundRef.current;
+        }
+
         updatedComponents[index] = component;
         return updatedComponents;
       });
     }
   }, [
-    color,
-    image,
     left,
     top,
     width,
@@ -594,7 +832,7 @@ const Main = () => {
   useEffect(() => {
     if (current_component) {
       // Reset numeric/string fields to empty to trigger updates only on change
-      setColor("");
+      // Note: Color is now handled directly via the color input's value attribute
       setWidth("");
       setHeight("");
       setTop("");
@@ -621,9 +859,33 @@ const Main = () => {
 
   useEffect(() => {
     const get_design = async () => {
-      // Only fetch design if design_id exists
-      if (!design_id) {
-        console.log("Design ID is undefined, skipping fetch");
+      // Check if this is a temporary design from CreateDesign (offline mode)
+      const locationState = location.state || {};
+      if (locationState.tempDesign && locationState.components) {
+        console.log("Loading temporary design from offline mode");
+        const tempDesign = locationState.components.map((comp) => ({
+          ...comp,
+          setCurrentComponent: (a) => setCurrentComponent(a),
+          moveElement: moveElementRef.current,
+          resizeElement: resizeElementRef.current,
+          rotateElement: rotateElementRef.current,
+          remove_background:
+            comp.name === "main_frame"
+              ? remove_backgroundRef.current
+              : undefined,
+        }));
+        setComponents(tempDesign);
+        saveToHistory(tempDesign);
+        toast.info("Working in offline mode");
+        return;
+      }
+
+      // Only fetch design if design_id exists and is not a temp ID
+      if (!design_id || design_id.startsWith("temp-")) {
+        console.log("Design ID is undefined or temporary, skipping fetch");
+        if (design_id && design_id.startsWith("temp-")) {
+          toast.info("Offline mode: Creating new design");
+        }
         return;
       }
 
@@ -639,29 +901,53 @@ const Main = () => {
           return;
         }
 
-        for (let i = 0; i < design.length; i++) {
-          design[i].setCurrentComponent = (a) => setCurrentComponent(a);
-          design[i].moveElement = moveElement;
-          design[i].resizeElement = resizeElement;
-          design[i].rotateElement = rotateElement;
-          design[i].remove_background = remove_background;
-        }
-        setComponents(design);
-        saveToHistory(design);
+        const designWithMethods = design.map((comp) => ({
+          ...comp,
+          setCurrentComponent: (a) => setCurrentComponent(a),
+          moveElement: moveElementRef.current,
+          resizeElement: resizeElementRef.current,
+          rotateElement: rotateElementRef.current,
+          remove_background:
+            comp.name === "main_frame"
+              ? remove_backgroundRef.current
+              : undefined,
+        }));
+        setComponents(designWithMethods);
+        saveToHistory(designWithMethods);
       } catch (error) {
         console.error("Error fetching design:", error);
         console.error("Design ID:", design_id);
         console.error("Error response:", error.response?.data);
 
-        // If design not found, keep the default components (for new designs)
-        if (error.response?.status === 404) {
+        // Handle offline/network errors gracefully
+        if (
+          error.message === "Network Error" ||
+          error.code === "ERR_NETWORK" ||
+          !navigator.onLine
+        ) {
+          console.log(
+            "Network error or offline - continuing with default components"
+          );
+          // Keep default components and allow editing offline
+          toast.info(
+            "Offline mode: Could not load design. You can still create a new design."
+          );
+        } else if (error.response?.status === 404) {
           console.log(
             "Design not found - using default components (this is normal for newly created designs)"
+          );
+          toast.info("Design not found. Starting with a new design.");
+        } else {
+          // For other errors, still allow editing with default components
+          console.log("Error loading design, but allowing offline editing");
+          toast.info(
+            "Could not load design. You can still create a new design."
           );
         }
       }
     };
     get_design();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [design_id]);
 
   return (
@@ -929,7 +1215,30 @@ const Main = () => {
                 </div>
                 <BackgroundImages
                   type="background"
-                  setImage={setImage}
+                  setImage={(img) => {
+                    setImage(img);
+                    // Update main_frame component directly
+                    setComponents((prevComponents) => {
+                      const mainFrameIndex = prevComponents.findIndex(
+                        (c) => c.name === "main_frame"
+                      );
+                      if (mainFrameIndex === -1) return prevComponents;
+                      const updated = [...prevComponents];
+                      updated[mainFrameIndex] = {
+                        ...updated[mainFrameIndex],
+                        image: img,
+                      };
+                      // Update current_component if it's main_frame
+                      if (current_component?.name === "main_frame") {
+                        setCurrentComponent({
+                          ...current_component,
+                          image: img,
+                        });
+                      }
+                      saveToHistory(updated);
+                      return updated;
+                    });
+                  }}
                   searchQuery={searchQuery}
                 />
               </div>
@@ -983,9 +1292,23 @@ const Main = () => {
               className={`flex justify-center relative items-center h-full ${
                 !current_component ? "w-full" : "w-[calc(100%-280px)]"
               } overflow-hidden bg-gradient-to-br from-gray-900/50 to-black/50`}
+              style={{
+                overflow: "hidden",
+              }}
             >
               {/* Zoom and Grid Controls */}
               <div className="absolute top-4 right-4 z-40 flex items-center gap-2">
+                <button
+                  onClick={() => setShowOverlays(!showOverlays)}
+                  className={`p-2 rounded-lg transition-all ${
+                    showOverlays
+                      ? "bg-purple-600 text-white"
+                      : "bg-gray-800 hover:bg-gray-700 text-gray-300"
+                  }`}
+                  title={showOverlays ? "Hide Overlays" : "Show Overlays"}
+                >
+                  {showOverlays ? <FaEye /> : <FaEyeSlash />}
+                </button>
                 <GridToggle
                   showGrid={showGrid}
                   onToggle={() => setShowGrid(!showGrid)}
@@ -1012,27 +1335,48 @@ const Main = () => {
               )}
 
               <div
-                className="m-w-[650px] m-h-[480px] flex justify-center items-center overflow-hidden p-8"
+                className="flex justify-center items-center"
                 style={{
-                  transform: `scale(${zoom / 100})`,
-                  transformOrigin: "center",
-                  transition: "transform 0.2s ease",
+                  width: "100%",
+                  height: "100%",
+                  overflow: "hidden",
+                  padding: "32px",
                 }}
               >
                 <div
-                  id="main_design"
-                  className="w-auto relative h-auto overflow-hidden select-none bg-white shadow-2xl rounded-lg"
+                  style={{
+                    transform: `scale(${zoom / 100})`,
+                    transformOrigin: "center",
+                    transition: "transform 0.2s ease",
+                    overflow: "hidden",
+                  }}
                 >
-                  {components.map((c, i) => (
-                    <CreateComponente
-                      selectItem={selectItem}
-                      setSelectItem={setSelectItem}
-                      key={c.id || i}
-                      info={c}
-                      current_component={current_component}
-                      removeComponent={removeComponent}
-                    />
-                  ))}
+                  <div
+                    id="main_design"
+                    className="select-none bg-white shadow-2xl rounded-lg"
+                    style={{
+                      width:
+                        components.find((c) => c.name === "main_frame")
+                          ?.width || 650,
+                      height:
+                        components.find((c) => c.name === "main_frame")
+                          ?.height || 450,
+                      overflow: "hidden",
+                      position: "relative",
+                    }}
+                  >
+                    {components.map((c, i) => (
+                      <CreateComponente
+                        selectItem={selectItem}
+                        setSelectItem={setSelectItem}
+                        key={c.id || i}
+                        info={c}
+                        current_component={current_component}
+                        removeComponent={removeComponent}
+                        showOverlays={showOverlays}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1102,7 +1446,30 @@ const Main = () => {
                         htmlFor="color"
                       ></label>
                       <input
-                        onChange={(e) => setColor(e.target.value)}
+                        value={current_component.color || "#ffffff"}
+                        onChange={(e) => {
+                          const newColor = e.target.value;
+                          // Update the component directly
+                          const updatedComponent = {
+                            ...current_component,
+                            color: newColor,
+                          };
+                          setCurrentComponent(updatedComponent);
+                          // Update components array immediately
+                          setComponents((prevComponents) => {
+                            const index = prevComponents.findIndex(
+                              (c) => c.id === current_component.id
+                            );
+                            if (index === -1) return prevComponents;
+                            const updated = [...prevComponents];
+                            updated[index] = {
+                              ...updated[index],
+                              color: newColor,
+                            };
+                            saveToHistory(updated);
+                            return updated;
+                          });
+                        }}
                         type="color"
                         className="invisible"
                         id="color"
@@ -1112,17 +1479,88 @@ const Main = () => {
                       </span>
                     </div>
                   </div>
-                  {current_component.name === "main_frame" &&
-                    current_component.image && (
+                  {current_component.name === "main_frame" && (
+                    <>
                       <div className="w-full">
-                        <button
-                          className="w-full py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-lg transition-all shadow-lg hover:shadow-xl font-medium"
-                          onClick={remove_background}
-                        >
-                          Remove Background
-                        </button>
+                        <label className="text-sm text-gray-400 mb-2 block">
+                          Canvas Width
+                        </label>
+                        <input
+                          onChange={(e) => {
+                            const newWidth = parseInt(e.target.value) || 650;
+                            const updatedComponent = {
+                              ...current_component,
+                              width: newWidth,
+                            };
+                            setCurrentComponent(updatedComponent);
+                            setComponents((prevComponents) => {
+                              const index = prevComponents.findIndex(
+                                (c) => c.id === current_component.id
+                              );
+                              if (index === -1) return prevComponents;
+                              const updated = [...prevComponents];
+                              updated[index] = {
+                                ...updated[index],
+                                width: newWidth,
+                              };
+                              saveToHistory(updated);
+                              return updated;
+                            });
+                          }}
+                          className="w-full border border-gray-700 bg-gray-900/50 text-white outline-none px-3 py-2 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                          type="number"
+                          step={1}
+                          min={100}
+                          max={2000}
+                          value={current_component.width || 650}
+                        />
                       </div>
-                    )}
+                      <div className="w-full">
+                        <label className="text-sm text-gray-400 mb-2 block">
+                          Canvas Height
+                        </label>
+                        <input
+                          onChange={(e) => {
+                            const newHeight = parseInt(e.target.value) || 450;
+                            const updatedComponent = {
+                              ...current_component,
+                              height: newHeight,
+                            };
+                            setCurrentComponent(updatedComponent);
+                            setComponents((prevComponents) => {
+                              const index = prevComponents.findIndex(
+                                (c) => c.id === current_component.id
+                              );
+                              if (index === -1) return prevComponents;
+                              const updated = [...prevComponents];
+                              updated[index] = {
+                                ...updated[index],
+                                height: newHeight,
+                              };
+                              saveToHistory(updated);
+                              return updated;
+                            });
+                          }}
+                          className="w-full border border-gray-700 bg-gray-900/50 text-white outline-none px-3 py-2 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                          type="number"
+                          step={1}
+                          min={100}
+                          max={2000}
+                          value={current_component.height || 450}
+                        />
+                      </div>
+                      {current_component.image && (
+                        <div className="w-full">
+                          <button
+                            className="w-full py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-lg transition-all shadow-lg hover:shadow-xl font-medium"
+                            onClick={remove_background}
+                          >
+                            Remove Background
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
 
                   {current_component.name !== "main_frame" && (
                     <div className="flex gap-4 flex-col w-full">
@@ -1286,6 +1724,11 @@ const Main = () => {
                               onChange={(e) => {
                                 const newFont = parseInt(e.target.value) || 22;
                                 setFont(newFont);
+                                const updatedComponent = {
+                                  ...current_component,
+                                  font: newFont,
+                                };
+                                setCurrentComponent(updatedComponent);
                                 // Update components array immediately
                                 setComponents((prevComponents) => {
                                   const index = prevComponents.findIndex(
@@ -1317,6 +1760,11 @@ const Main = () => {
                                 const newWeight =
                                   parseInt(e.target.value) || 400;
                                 setWeight(newWeight);
+                                const updatedComponent = {
+                                  ...current_component,
+                                  weight: newWeight,
+                                };
+                                setCurrentComponent(updatedComponent);
                                 // Update components array immediately
                                 setComponents((prevComponents) => {
                                   const index = prevComponents.findIndex(

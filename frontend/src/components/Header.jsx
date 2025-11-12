@@ -18,22 +18,37 @@ const Header = ({ components, design_id }) => {
   const navigate = useNavigate();
   const [loader, setLoader] = useState(false);
   const saveImage = async () => {
-    // Check if design_id exists
-    if (!design_id) {
-      toast.error("Design ID is missing. Cannot save design.");
+    // Check if design_id exists or is a temp design
+    if (!design_id || design_id.startsWith("temp-")) {
+      toast.error("Cannot save: This is a temporary design. Please create a new design when online.");
+      return;
+    }
+
+    // Check if offline
+    if (!navigator.onLine) {
+      toast.error("Offline: Cannot save design. Please check your connection.");
       return;
     }
 
     const getDiv = document.getElementById("main_design");
-    const image = await htmlToImage.toBlob(getDiv);
+    if (!getDiv) {
+      toast.error("Design canvas not found");
+      return;
+    }
 
-    if (image) {
-      try {
-        setLoader(true);
+    try {
+      const image = await htmlToImage.toBlob(getDiv);
+      if (!image) {
+        toast.error("Failed to generate design image");
+        return;
+      }
 
-        // Convert blob to base64 (matching createUserDesign pattern)
-        const reader = new FileReader();
-        reader.onloadend = async () => {
+      setLoader(true);
+
+      // Convert blob to base64 (matching createUserDesign pattern)
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
           const base64Data = reader.result.split(",")[1]; // Remove data:image/jpeg;base64, prefix
 
           const requestBody = {
@@ -54,12 +69,20 @@ const Header = ({ components, design_id }) => {
             data?.data?.message || data?.message || "Design saved successfully"
           );
           setLoader(false);
-        };
-        reader.readAsDataURL(image);
-      } catch (error) {
-        setLoader(false);
-        toast.error(error.response?.data?.message || "Failed to save design");
-      }
+        } catch (error) {
+          setLoader(false);
+          if (error.message === "Network Error" || error.code === "ERR_NETWORK" || !navigator.onLine) {
+            toast.error("Offline: Cannot save design. Please check your connection.");
+          } else {
+            toast.error(error.response?.data?.message || "Failed to save design");
+          }
+        }
+      };
+      reader.readAsDataURL(image);
+    } catch (error) {
+      setLoader(false);
+      console.error("Error generating image:", error);
+      toast.error("Failed to generate design image");
     }
   };
 

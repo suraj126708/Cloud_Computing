@@ -1,6 +1,6 @@
 import axios from "axios";
-// const local_api = "https://mi3w6bx3f6.execute-api.us-east-1.amazonaws.com/dev/";
-const local_api = "http://localhost:3000/";
+const local_api = "https://mi3w6bx3f6.execute-api.us-east-1.amazonaws.com/dev/";
+// const local_api = "http://localhost:3000/";
 // const production_api = ''
 
 const api = axios.create({
